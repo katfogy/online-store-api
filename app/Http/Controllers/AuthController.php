@@ -11,67 +11,47 @@ use App\Traits\HasJsonResponse;
 use App\Traits\GeneratesAuthAccessCredentials;
 use App\Support\HttpConstants as HTTP;
 use Illuminate\Auth\Events\Registered;
+use App\Http\Requests\RegisterRequest;
+use App\Http\Requests\LoginRequest;
+use App\Http\Requests\ChangePasswordRequest;
 
+use App\Http\Controllers\Controller;
 
 class AuthController extends Controller
 {
     use HasJsonResponse, GeneratesAuthAccessCredentials;
     
-    public function register(Request $request)
-{
-    $validator = Validator::make($request->all(), [
-        'name' => 'required|string|max:255',
-        'email' => 'required|string|email|max:255|unique:users',
-        'password' => 'required|string|min:6|confirmed',
-        'phone_number' => 'nullable|string|max:20',
-    ]);
+   
+    public function register(RegisterRequest $request)
+    {
+        $user = User::create([
+            'name' => $request->name,
+            'email' => $request->email,
+            'phone_number' => $request->phone_number,
+            'password' => Hash::make($request->password),
+        ]);
 
-    if ($validator->fails()) {
-        return $this->jsonResponse(HTTP::HTTP_VALIDATION_ERROR, 'Validation failed', $validator->errors());
+        event(new Registered($user));
+
+        return $this->jsonResponse(HTTP::HTTP_CREATED, 'Registration successful. Please verify your email.', [
+            'user' => $user,
+        ]);
     }
 
-    $user = User::create([
-        'name' => $request->name,
-        'email' => $request->email,
-        'phone_number' => $request->phone_number,
-        'password' => Hash::make($request->password),
-    ]);
-
-    // Send email verification
-    event(new Registered($user));
-
-    [$token, $expiresAt] = $this->generateAccessCredentialsFor($user);
-
-    return $this->jsonResponse(HTTP::HTTP_CREATED, 'Registration successful. Please verify your email.', [
-        'token' => $token,
-        'expires_at' => $expiresAt,
-        'user' => $user,
-    ]);
-}
-
-    public function login(Request $request)
+    public function login(LoginRequest $request)
     {
-        $validator = Validator::make($request->all(), [
-            'email' => 'required|string|email',
-            'password' => 'required|string',
-        ]);
-    
-        if ($validator->fails()) {
-            return $this->jsonResponse(HTTP::HTTP_VALIDATION_ERROR, 'Validation failed', $validator->errors());
-        }
-    
         $user = User::where('email', $request->email)->first();
-    
+
         if (! $user || ! Hash::check($request->password, $user->password)) {
             return $this->jsonResponse(HTTP::HTTP_UNAUTHENTICATED, 'Invalid credentials');
         }
-    
+
         if (! $user->hasVerifiedEmail()) {
             return $this->jsonResponse(HTTP::HTTP_FORBIDDEN, 'Please verify your email before logging in.');
         }
-    
+
         [$token, $expiresAt] = $this->generateAccessCredentialsFor($user);
-    
+
         return $this->jsonResponse(HTTP::HTTP_SUCCESS, 'Login successful', [
             'token' => $token,
             'expires_at' => $expiresAt,
@@ -79,39 +59,45 @@ class AuthController extends Controller
         ]);
     }
 
+    public function logout()
+    {
+        auth()->user()->currentAccessToken()->delete();
 
-    public function logout(Request $request)
-{
-    $user = $request->user();
-    $user->currentAccessToken()->delete();
-
-    return $this->jsonResponse(HTTP::HTTP_SUCCESS, 'Logout successful');
-}
-
-public function changePassword(Request $request)
-{
-    $validator = Validator::make($request->all(), [
-        'current_password' => 'required|string',
-        'new_password' => 'required|string|min:6|confirmed', // requires new_password_confirmation
-    ]);
-
-    if ($validator->fails()) {
-        return $this->jsonResponse(HTTP::HTTP_VALIDATION_ERROR, 'Validation failed', $validator->errors());
+        return $this->jsonResponse(HTTP::HTTP_SUCCESS, 'Logout successful');
     }
 
-    $user = $request->user();
+    public function changePassword(ChangePasswordRequest $request)
+    {
+        $user = $request->user();
 
-    // Check current password
-    if (!Hash::check($request->current_password, $user->password)) {
-        return $this->jsonResponse(HTTP::HTTP_FORBIDDEN, 'Current password is incorrect');
+        if (! Hash::check($request->current_password, $user->password)) {
+            return $this->jsonResponse(HTTP::HTTP_FORBIDDEN, 'Current password is incorrect');
+        }
+
+        $user->update([
+            'password' => Hash::make($request->new_password),
+        ]);
+
+        return $this->jsonResponse(HTTP::HTTP_SUCCESS, 'Password changed successfully');
     }
 
-    // Update password
-    $user->update([
-        'password' => Hash::make($request->new_password),
-    ]);
 
-    return $this->jsonResponse(HTTP::HTTP_SUCCESS, 'Password changed successfully');
-}
+    public function verify(Request $request, $id, $hash)
+    {
+        $user = User::findOrFail($id);
+
+        if (! hash_equals((string) $hash, sha1($user->getEmailForVerification()))) {
+
+            return $this->jsonResponse(HTTP::HTTP_FORBIDDEN, 'Invalid verification link');
+        }
+
+        if ($user->hasVerifiedEmail()) {
+            return $this->jsonResponse(HTTP::HTTP_SUCCESS, 'Email already verified');
+        }
+
+        $user->markEmailAsVerified();
+        return $this->jsonResponse(HTTP::HTTP_SUCCESS, 'Email verified successfully');
+
+    }
 
 }

@@ -15,7 +15,6 @@ return Application::configure(basePath: dirname(__DIR__))
         api: __DIR__.'/../routes/api.php', 
         health: '/up',
         then: function () {
-            // ✅ Define the 'api' rate limiter here
             Illuminate\Support\Facades\RateLimiter::for('api', function (Illuminate\Http\Request $request) {
                 return Illuminate\Cache\RateLimiting\Limit::perMinute(60)->by($request->user()?->id ?: $request->ip());
             });
@@ -23,7 +22,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->group('api', [
-            EnsureFrontendRequestsAreStateful::class, // ✅ Add this line
+            EnsureFrontendRequestsAreStateful::class, 
             SubstituteBindings::class,
             ThrottleRequests::class . ':api',
         ]);
