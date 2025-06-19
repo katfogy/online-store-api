@@ -10,34 +10,87 @@ use Illuminate\Support\Facades\Validator;
 use App\Traits\HasJsonResponse;
 use App\Traits\GeneratesAuthAccessCredentials;
 use App\Support\HttpConstants as HTTP;
-use Illuminate\Auth\Events\Registered;
 use App\Http\Requests\RegisterRequest;
 use App\Http\Requests\LoginRequest;
 use App\Http\Requests\ChangePasswordRequest;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
+use App\Models\Otp;
+use App\Http\Requests\VerifyOtpRequest;
+use App\Http\Requests\ResendOtpRequest;
+
 
 use App\Http\Controllers\Controller;
 
 class AuthController extends Controller
 {
     use HasJsonResponse, GeneratesAuthAccessCredentials;
-    
-   
+
     public function register(RegisterRequest $request)
     {
-        $user = User::create([
-            'name' => $request->name,
-            'email' => $request->email,
-            'phone_number' => $request->phone_number,
-            'password' => Hash::make($request->password),
-        ]);
+        DB::beginTransaction();
 
-        event(new Registered($user));
+        try {
+            $user = User::create([
+                'name' => $request->name,
+                'email' => $request->email,
+                'phone_number' => $request->phone_number,
+                'password' => Hash::make($request->password),
+            ]);
 
-        return $this->jsonResponse(HTTP::HTTP_CREATED, 'Registration successful. Please verify your email.', [
-            'user' => $user,
-        ]);
+            $this->sendOtp($user, 'account_creation');
+
+            DB::commit();
+
+            return $this->jsonResponse(HTTP::HTTP_CREATED, 'Registration successful. Please check your email for the OTP.', [
+                'user' => $user,
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return $this->jsonResponse(HTTP::HTTP_SERVER_ERROR, 'Registration failed. Please try again.', [
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
+    public function verifyOtp(VerifyOtpRequest $request)
+    {
+        DB::beginTransaction();
+    
+        try {
+            $user = User::where('email', $request->email)->first();
+    
+            if (! $user) {
+                return $this->jsonResponse(HTTP::HTTP_NOT_FOUND, 'User not found');
+            }
+    
+            $otp = Otp::where('user_id', $user->id)
+                      ->where('type', 'account_creation')
+                      ->where('otp', $request->otp)
+                      ->where('expired_at', '>', now())
+                      ->latest()
+                      ->first();
+    
+            if (! $otp) {
+                $this->sendOtp($user, 'account_creation');
+                return $this->jsonResponse(HTTP::HTTP_FORBIDDEN, 'Invalid or expired OTP. A new OTP has been sent.');
+            }
+    
+            $user->email_verified_at = now();
+            $user->save();
+            $otp->delete();
+    
+            DB::commit();
+    
+            return $this->jsonResponse(HTTP::HTTP_SUCCESS, 'Email verified successfully');
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return $this->jsonResponse(HTTP::HTTP_SERVER_ERROR, 'OTP verification failed.', [
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+    
     public function login(LoginRequest $request)
     {
         $user = User::where('email', $request->email)->first();
@@ -46,8 +99,8 @@ class AuthController extends Controller
             return $this->jsonResponse(HTTP::HTTP_UNAUTHENTICATED, 'Invalid credentials');
         }
 
-        if (! $user->hasVerifiedEmail()) {
-            return $this->jsonResponse(HTTP::HTTP_FORBIDDEN, 'Please verify your email before logging in.');
+        if (! $user->email_verified_at) {
+            return $this->jsonResponse(HTTP::HTTP_FORBIDDEN, 'Please verify your email with OTP before logging in.');
         }
 
         [$token, $expiresAt] = $this->generateAccessCredentialsFor($user);
@@ -62,7 +115,6 @@ class AuthController extends Controller
     public function logout()
     {
         auth()->user()->currentAccessToken()->delete();
-
         return $this->jsonResponse(HTTP::HTTP_SUCCESS, 'Logout successful');
     }
 
@@ -82,22 +134,44 @@ class AuthController extends Controller
     }
 
 
-    public function verify(Request $request, $id, $hash)
-    {
-        $user = User::findOrFail($id);
 
-        if (! hash_equals((string) $hash, sha1($user->getEmailForVerification()))) {
+public function resendOtp(ResendOtpRequest $request)
+{
+    $user = User::where('email', $request->email)->first();
 
-            return $this->jsonResponse(HTTP::HTTP_FORBIDDEN, 'Invalid verification link');
-        }
-
-        if ($user->hasVerifiedEmail()) {
-            return $this->jsonResponse(HTTP::HTTP_SUCCESS, 'Email already verified');
-        }
-
-        $user->markEmailAsVerified();
-        return $this->jsonResponse(HTTP::HTTP_SUCCESS, 'Email verified successfully');
-
+    if (! $user) {
+        return $this->jsonResponse(HTTP::HTTP_NOT_FOUND, 'User not found');
     }
+
+    try {
+        $this->sendOtp($user, 'account_creation');
+        return $this->jsonResponse(HTTP::HTTP_SUCCESS, 'A new OTP has been sent to your email.');
+    } catch (\Exception $e) {
+        return $this->jsonResponse(HTTP::HTTP_SERVER_ERROR, 'Failed to resend OTP', [
+            'error' => $e->getMessage(),
+        ]);
+    }
+}
+
+
+
+    private function sendOtp(User $user, string $type)
+    {
+        $otpCode = rand(100000, 999999);
+
+        Otp::updateOrCreate(
+            ['user_id' => $user->id, 'type' => $type],
+            [
+                'otp' => $otpCode,
+                'expired_at' => now()->addMinutes(10),
+            ]
+        );
+
+        Mail::raw("Your OTP is: $otpCode", function ($message) use ($user) {
+            $message->to($user->email)->subject('Verify Your Account');
+        });
+    }
+
+
 
 }
