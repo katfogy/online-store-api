@@ -1,5 +1,5 @@
 @component('mail::message')
-# Verify Your Email
+# {{ $type === 'change_password' ? 'Change Your Password' : 'Verify Your Email' }}
 
 Your One-Time Password (OTP) is:
 

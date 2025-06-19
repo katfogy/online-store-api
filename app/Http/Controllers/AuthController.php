@@ -19,6 +19,7 @@ use App\Models\Otp;
 use App\Http\Requests\VerifyOtpRequest;
 use App\Http\Requests\ResendOtpRequest;
 use App\Mail\OtpMail;
+use App\Http\Requests\VerifyPasswordOtpRequest;
 
 
 use App\Http\Controllers\Controller;
@@ -43,7 +44,7 @@ class AuthController extends Controller
 
             DB::commit();
 
-            return $this->jsonResponse(HTTP::HTTP_CREATED, 'Registration successful. Please check your email for the OTP.', [
+            return $this->jsonResponse(HTTP::HTTP_CREATED, 'Registration successful. Check your email for the OTP.', [
                 'user' => $user,
             ]);
         } catch (\Exception $e) {
@@ -53,6 +54,38 @@ class AuthController extends Controller
             ]);
         }
     }
+
+
+
+    public function login(LoginRequest $request)
+    {
+        $user = User::where('email', $request->email)->first();
+
+        if (! $user || ! Hash::check($request->password, $user->password)) {
+            return $this->jsonResponse(HTTP::HTTP_UNAUTHENTICATED, 'Invalid credentials');
+        }
+
+        if (! $user->email_verified_at) {
+            return $this->jsonResponse(HTTP::HTTP_FORBIDDEN, 'Please verify your email with OTP before logging in.');
+        }
+
+        [$token, $expiresAt] = $this->generateAccessCredentialsFor($user);
+
+        return $this->jsonResponse(HTTP::HTTP_SUCCESS, 'Login successful', [
+            'token' => $token,
+            'expires_at' => $expiresAt,
+            'user' => $user,
+        ]);
+    }
+
+
+
+    public function logout()
+    {
+        auth()->user()->currentAccessToken()->delete();
+        return $this->jsonResponse(HTTP::HTTP_SUCCESS, 'Logout successful');
+    }
+
 
     public function verifyOtp(VerifyOtpRequest $request)
     {
@@ -91,69 +124,80 @@ class AuthController extends Controller
             ]);
         }
     }
-    
-    public function login(LoginRequest $request)
+
+
+
+    public function requestChangePasswordOtp(Request $request)
     {
+        $request->validate(['email' => 'required|email|exists:users,email']);
+
         $user = User::where('email', $request->email)->first();
 
-        if (! $user || ! Hash::check($request->password, $user->password)) {
-            return $this->jsonResponse(HTTP::HTTP_UNAUTHENTICATED, 'Invalid credentials');
-        }
+        $this->sendOtp($user, 'change_password');
 
-        if (! $user->email_verified_at) {
-            return $this->jsonResponse(HTTP::HTTP_FORBIDDEN, 'Please verify your email with OTP before logging in.');
-        }
-
-        [$token, $expiresAt] = $this->generateAccessCredentialsFor($user);
-
-        return $this->jsonResponse(HTTP::HTTP_SUCCESS, 'Login successful', [
-            'token' => $token,
-            'expires_at' => $expiresAt,
-            'user' => $user,
-        ]);
+        return $this->jsonResponse(HTTP::HTTP_SUCCESS, 'OTP sent to your email.');
     }
 
-    public function logout()
+    /**
+     * Verify OTP and change password
+     */
+    public function verifyChangePasswordOtp(VerifyPasswordOtpRequest $request)
     {
-        auth()->user()->currentAccessToken()->delete();
-        return $this->jsonResponse(HTTP::HTTP_SUCCESS, 'Logout successful');
-    }
+        DB::beginTransaction();
 
-    public function changePassword(ChangePasswordRequest $request)
-    {
-        $user = $request->user();
+        try {
+            $user = User::where('email', $request->email)->first();
 
-        if (! Hash::check($request->current_password, $user->password)) {
-            return $this->jsonResponse(HTTP::HTTP_FORBIDDEN, 'Current password is incorrect');
+            $otp = Otp::where('user_id', $user->id)
+                ->where('type', 'change_password')
+                ->where('otp', $request->otp)
+                ->where('expired_at', '>', now())
+                ->latest()
+                ->first();
+
+            if (! $otp) {
+                return $this->jsonResponse(HTTP::HTTP_FORBIDDEN, 'Invalid or expired OTP.');
+            }
+
+            $user->update([
+                'password' => Hash::make($request->new_password),
+            ]);
+
+            $otp->delete();
+            DB::commit();
+
+            return $this->jsonResponse(HTTP::HTTP_SUCCESS, 'Password changed successfully.');
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return $this->jsonResponse(HTTP::HTTP_SERVER_ERROR, 'Password change failed.', [
+                'error' => $e->getMessage(),
+            ]);
         }
-
-        $user->update([
-            'password' => Hash::make($request->new_password),
-        ]);
-
-        return $this->jsonResponse(HTTP::HTTP_SUCCESS, 'Password changed successfully');
     }
 
 
 
-public function resendOtp(ResendOtpRequest $request)
+    public function resendOtp(ResendOtpRequest $request)
 {
-    $user = User::where('email', $request->email)->first();
-
-    if (! $user) {
-        return $this->jsonResponse(HTTP::HTTP_NOT_FOUND, 'User not found');
-    }
-
     try {
-        $this->sendOtp($user, 'account_creation');
-        return $this->jsonResponse(HTTP::HTTP_SUCCESS, 'A new OTP has been sent to your email.');
+        $user = User::where('email', $request->email)->first();
+
+        if (! $user) {
+            return $this->jsonResponse(HTTP::HTTP_NOT_FOUND, 'User not found.');
+        }
+
+        $this->sendOtp($user, $request->type);
+
+        return $this->jsonResponse(HTTP::HTTP_SUCCESS, 'OTP resent successfully.');
     } catch (\Exception $e) {
-        return $this->jsonResponse(HTTP::HTTP_SERVER_ERROR, 'Failed to resend OTP', [
+        return $this->jsonResponse(HTTP::HTTP_SERVER_ERROR, 'Failed to resend OTP.', [
             'error' => $e->getMessage(),
         ]);
     }
 }
 
+
+    
 
 
     private function sendOtp(User $user, string $type)
@@ -168,9 +212,9 @@ public function resendOtp(ResendOtpRequest $request)
             ]
         );
 
-        Mail::to($user->email)->queue(new OtpMail($otpCode));
+        // Queue the email using Markdown mail
+        Mail::to($user->email)->queue(new OtpMail($otpCode, $type));
     }
-
-
-
 }
+
+

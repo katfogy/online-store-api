@@ -13,11 +13,12 @@ class OtpMail extends Mailable
 {
     use Queueable, SerializesModels;
     public $otpCode;
+    public $type;
 
     /**
      * Create a new message instance.
      */
-    public function __construct($otpCode)
+    public function __construct($otpCode, $type = 'account_creation')
     {
         $this->otpCode = $otpCode;
     }
@@ -27,9 +28,14 @@ class OtpMail extends Mailable
      */
     public function envelope(): Envelope
     {
-        return new Envelope(
-            subject: 'Verify Your Account',
-        );
+        $subject = $this->type === 'change_password'
+        ? 'Change Password Request'
+        : 'Verify Your Account';
+
+    return new Envelope(
+        subject: $subject,
+    );
+    
     }
 
     /**

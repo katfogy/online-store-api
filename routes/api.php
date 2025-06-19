@@ -14,10 +14,12 @@ Route::get('/ping', function () {
 Route::post('/register', [AuthController::class, 'register'])->name('register');
 Route::post('/login', [AuthController::class, 'login'])->name('login');
 Route::post('/verify-otp', [AuthController::class, 'verifyOtp']);
+Route::post('/request-password-otp', [AuthController::class, 'requestChangePasswordOtp']);
+Route::post('/verify-password-otp', [AuthController::class, 'verifyChangePasswordOtp']);
+Route::post('/resend-otp', [AuthController::class, 'resendOtp']);
 // No auth:sanctum
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
-    Route::post('/change-password', [AuthController::class, 'changePassword']);
 });
 
