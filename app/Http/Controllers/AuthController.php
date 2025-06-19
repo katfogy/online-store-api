@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\Mail;
 use App\Models\Otp;
 use App\Http\Requests\VerifyOtpRequest;
 use App\Http\Requests\ResendOtpRequest;
+use App\Mail\OtpMail;
 
 
 use App\Http\Controllers\Controller;
@@ -167,9 +168,7 @@ public function resendOtp(ResendOtpRequest $request)
             ]
         );
 
-        Mail::raw("Your OTP is: $otpCode", function ($message) use ($user) {
-            $message->to($user->email)->subject('Verify Your Account');
-        });
+        Mail::to($user->email)->queue(new OtpMail($otpCode));
     }
 
 
