@@ -23,7 +23,7 @@ class ResendOtpRequest extends FormRequest
     {
         return [
             'email' => 'required|email|exists:users,email',
-            'type' => 'required|in:account_creation,change_password',
+            'type' => 'required',
         ];
     }
 

@@ -12,8 +12,8 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('otps', function (Blueprint $table) {
-        $table->uuid('id')->primary(); // UUID as primary key
-        $table->uuid('user_id'); // match user ID type from users table
+        $table->uuid('id')->primary(); 
+        $table->uuid('user_id');
         $table->enum('type', ['account_creation', 'change_password']);
         $table->string('otp');
         $table->timestamp('expired_at');

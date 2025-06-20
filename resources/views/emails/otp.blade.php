@@ -1,13 +1,10 @@
 @component('mail::message')
-# {{ $type === 'change_password' ? 'Change Your Password' : 'Verify Your Email' }}
+# OTP Verification
 
-Your One-Time Password (OTP) is:
+Your OTP is: **{{ $otpCode }}**
 
-# **{{ $otpCode }}**
+This OTP will expire in 10 minutes.
 
-This OTP is valid for 10 minutes.  
-Please do not share it with anyone.
-
-Thanks,<br>
+Thanks,  
 {{ config('app.name') }}
 @endcomponent
