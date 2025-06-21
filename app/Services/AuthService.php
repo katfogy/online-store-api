@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Services;
 
 use App\Models\User;
@@ -16,7 +18,7 @@ class AuthService
 
     public function registerUser(array $data): User
     {
-        return DB::transaction(function () use ($data) {
+        return DB::transaction(function () use ($data): User {
             $user = User::create([
                 'name' => $data['name'],
                 'email' => $data['email'],
@@ -29,7 +31,7 @@ class AuthService
         });
     }
 
-    public function loginUser(string $email, string $password)
+    public function loginUser(string $email, string $password): array
     {
         $user = User::where('email', $email)->first();
 
@@ -52,12 +54,14 @@ class AuthService
         ];
     }
 
-    public function verifyAccountOtp(string $email, string $otpCode)
+    public function verifyAccountOtp(string $email, string $otpCode): array
     {
-        return DB::transaction(function () use ($email, $otpCode) {
+        return DB::transaction(function () use ($email, $otpCode): array {
             $user = User::where('email', $email)->first();
 
-            if (! $user) return ['error' => 'User not found', 'status' => 404];
+            if (! $user) {
+                return ['error' => 'User not found', 'status' => 404];
+            }
 
             $otp = Otp::where('user_id', $user->id)
                 ->where('type', 'account_creation')
@@ -78,12 +82,14 @@ class AuthService
         });
     }
 
-    public function verifyPasswordOtp(string $email, string $otpCode, string $newPassword)
+    public function verifyPasswordOtp(string $email, string $otpCode, string $newPassword): array
     {
-        return DB::transaction(function () use ($email, $otpCode, $newPassword) {
+        return DB::transaction(function () use ($email, $otpCode, $newPassword): array {
             $user = User::where('email', $email)->first();
 
-            if (! $user) return ['error' => 'User not found', 'status' => 404];
+            if (! $user) {
+                return ['error' => 'User not found', 'status' => 404];
+            }
 
             $otp = Otp::where('user_id', $user->id)
                 ->where('type', 'change_password')
