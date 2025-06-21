@@ -2,102 +2,110 @@
 
 namespace App\Http\Controllers;
 
-
 use App\Models\User;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Validator;
 use App\Traits\HasJsonResponse;
-use App\Traits\GeneratesAuthAccessCredentials;
 use App\Support\HttpConstants as HTTP;
-use Illuminate\Auth\Events\Registered;
 use App\Http\Requests\RegisterRequest;
 use App\Http\Requests\LoginRequest;
-use App\Http\Requests\ChangePasswordRequest;
-
-use App\Http\Controllers\Controller;
+use App\Http\Requests\VerifyOtpRequest;
+use App\Http\Requests\ResendOtpRequest;
+use App\Http\Requests\VerifyPasswordOtpRequest;
+use App\Services\AuthService;
 
 class AuthController extends Controller
 {
-    use HasJsonResponse, GeneratesAuthAccessCredentials;
-    
-   
+    use HasJsonResponse;
+
+    protected $authService;
+
+    public function __construct(AuthService $authService)
+    {
+        $this->authService = $authService;
+    }
+
     public function register(RegisterRequest $request)
     {
-        $user = User::create([
-            'name' => $request->name,
-            'email' => $request->email,
-            'phone_number' => $request->phone_number,
-            'password' => Hash::make($request->password),
-        ]);
+        try {
+            $user = $this->authService->registerUser($request->validated());
 
-        event(new Registered($user));
-
-        return $this->jsonResponse(HTTP::HTTP_CREATED, 'Registration successful. Please verify your email.', [
-            'user' => $user,
-        ]);
+            return $this->jsonResponse(HTTP::HTTP_CREATED, 'Registration successful. Check your email for the OTP.', [
+                'user' => $user,
+            ]);
+        } catch (\Exception $e) {
+            return $this->jsonResponse(HTTP::HTTP_SERVER_ERROR, 'Registration failed. Please try again.', [
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     public function login(LoginRequest $request)
     {
-        $user = User::where('email', $request->email)->first();
+        $response = $this->authService->loginUser($request->email, $request->password);
 
-        if (! $user || ! Hash::check($request->password, $user->password)) {
-            return $this->jsonResponse(HTTP::HTTP_UNAUTHENTICATED, 'Invalid credentials');
-        }
-
-        if (! $user->hasVerifiedEmail()) {
-            return $this->jsonResponse(HTTP::HTTP_FORBIDDEN, 'Please verify your email before logging in.');
-        }
-
-        [$token, $expiresAt] = $this->generateAccessCredentialsFor($user);
-
-        return $this->jsonResponse(HTTP::HTTP_SUCCESS, 'Login successful', [
-            'token' => $token,
-            'expires_at' => $expiresAt,
-            'user' => $user,
-        ]);
+        return isset($response['error'])
+            ? $this->jsonResponse($response['status'], $response['error'])
+            : $this->jsonResponse(HTTP::HTTP_CREATED, 'Login successful', [
+                'user' => $response['user'],
+                'token' => $response['token'],
+                'expires_at' => $response['expires_at'],
+            ]);
     }
 
     public function logout()
     {
         auth()->user()->currentAccessToken()->delete();
-
         return $this->jsonResponse(HTTP::HTTP_SUCCESS, 'Logout successful');
     }
 
-    public function changePassword(ChangePasswordRequest $request)
+    public function verifyOtp(VerifyOtpRequest $request)
     {
-        $user = $request->user();
+        $response = $this->authService->verifyAccountOtp($request->email, $request->otp);
 
-        if (! Hash::check($request->current_password, $user->password)) {
-            return $this->jsonResponse(HTTP::HTTP_FORBIDDEN, 'Current password is incorrect');
-        }
-
-        $user->update([
-            'password' => Hash::make($request->new_password),
-        ]);
-
-        return $this->jsonResponse(HTTP::HTTP_SUCCESS, 'Password changed successfully');
+        return isset($response['error'])
+            ? $this->jsonResponse($response['status'], $response['error'])
+            : $this->jsonResponse($response['status'], $response['success']);
     }
 
-
-    public function verify(Request $request, $id, $hash)
+    public function verifyChangePasswordOtp(VerifyPasswordOtpRequest $request)
     {
-        $user = User::findOrFail($id);
+        $response = $this->authService->verifyPasswordOtp(
+            $request->email,
+            $request->otp,
+            $request->new_password
+        );
 
-        if (! hash_equals((string) $hash, sha1($user->getEmailForVerification()))) {
-
-            return $this->jsonResponse(HTTP::HTTP_FORBIDDEN, 'Invalid verification link');
-        }
-
-        if ($user->hasVerifiedEmail()) {
-            return $this->jsonResponse(HTTP::HTTP_SUCCESS, 'Email already verified');
-        }
-
-        $user->markEmailAsVerified();
-        return $this->jsonResponse(HTTP::HTTP_SUCCESS, 'Email verified successfully');
-
+        return isset($response['error'])
+            ? $this->jsonResponse($response['status'], $response['error'])
+            : $this->jsonResponse($response['status'], $response['success']);
     }
 
+    public function requestChangePasswordOtp(Request $request)
+    {
+        $request->validate(['email' => 'required|email|exists:users,email']);
+
+        $user = User::where('email', $request->email)->first();
+        $this->authService->resendOtp($user, 'change_password');
+
+        return $this->jsonResponse(HTTP::HTTP_SUCCESS, 'OTP sent to your email.');
+    }
+
+    public function resendOtp(ResendOtpRequest $request)
+    {
+        try {
+            $user = User::where('email', $request->email)->first();
+
+            if (! $user) {
+                return $this->jsonResponse(HTTP::HTTP_NOT_FOUND, 'User not found.');
+            }
+
+            $this->authService->resendOtp($user, $request->type);
+
+            return $this->jsonResponse(HTTP::HTTP_SUCCESS, 'OTP resent successfully.');
+        } catch (\Exception $e) {
+            return $this->jsonResponse(HTTP::HTTP_SERVER_ERROR, 'Failed to resend OTP.', [
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
 }
