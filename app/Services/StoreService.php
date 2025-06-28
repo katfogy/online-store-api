@@ -13,8 +13,6 @@ class StoreService
     public function getAllStores()
 {
     $user = Auth::user();
-
-    // Admins can see all stores
     if ($user->role && $user->role->name === 'admin') {
         return Store::with('user')->paginate(20);
     }
@@ -36,8 +34,7 @@ public function getStoreById($id)
     $store = $query->first();
 
     if (!$store) {
-        // Use your jsonResponse helper or throw custom error
-        return $this->jsonResponse(HTTP::HTTP_NOT_FOUND, 'Store not found', $store); // Or:
+        return $this->jsonResponse(HTTP::HTTP_NOT_FOUND, 'Store not found', $store); 
     }
 
     return $store;
@@ -82,7 +79,6 @@ public function deleteStore($id)
     $store = $query->first();
 
     if (!$store) {
-        // Custom response (you can replace with abort(404, ...) if needed)
         return $this->jsonResponse(HTTP::HTTP_NOT_FOUND, 'Store not found');
     }else{
 
@@ -96,7 +92,6 @@ public function deleteStore($id)
 
 public function createStore(array $data)
 {
-    // Automatically generate slug from name
     $data['slug'] = Str::slug($data['name']);
 
     return Store::create($data);

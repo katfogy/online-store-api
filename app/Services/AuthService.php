@@ -29,13 +29,12 @@ class AuthService
         throw new \Exception('Role not found.');
     }
 
-        // Create user with admin role by default
         $user = User::create([
             'name'        => $data['name'],
             'email'       => $data['email'],
             'phone_number'=> $data['phone_number'],
             'password'    => Hash::make($data['password']),
-            'role_id'     => $role->id, // Set role
+            'role_id'     => $role->id, 
         ]);
 
             $this->sendOtp($user, 'account_creation');
