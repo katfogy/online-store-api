@@ -20,14 +20,35 @@ class AuthService
     public function registerUser(array $data): User
     {
         return DB::transaction(function () use ($data): User {
-              // Check if role_id is provided, else fallback to 'user'
-        $role = isset($data['role_id'])
-        ? Role::where('id', $data['role_id'])->first()
-        : Role::where('name', 'User')->first();
+            $role = Role::where('name', 'User')->first();
 
-    if (!$role) {
-        throw new \Exception('Role not found.');
+            if (!$role) {
+                throw new \Exception('User role not found.');
+            }
+
+        $user = User::create([
+            'name'        => $data['name'],
+            'email'       => $data['email'],
+            'phone_number'=> $data['phone_number'],
+            'password'    => Hash::make($data['password']),
+            'role_id'     => $role->id, 
+        ]);
+
+            $this->sendOtp($user, 'account_creation');
+            return $user;
+        });
     }
+
+
+
+    public function registerAdmin(array $data): User
+    {
+        return DB::transaction(function () use ($data): User {
+            $role = Role::where('name', 'Admin')->first();
+
+            if (!$role) {
+                throw new \Exception('Admin role not found.');
+            }
 
         $user = User::create([
             'name'        => $data['name'],

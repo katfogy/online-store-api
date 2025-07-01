@@ -35,3 +35,9 @@ Route::middleware('auth:sanctum')->prefix('user')->group(function () {
     Route::delete('stores/{id}', [StoreController::class, 'destroy'])->name('candidate.stores.destroy');
 });
 
+
+Route::middleware('auth:sanctum')->prefix('admin')->group(function () {
+    // Store resource endpoints
+    Route::get('create-admin', [StoreController::class, 'registerAdmin'])->name('create.admin');
+    
+});

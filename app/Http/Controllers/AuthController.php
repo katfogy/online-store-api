@@ -39,6 +39,21 @@ class AuthController extends Controller
         }
     }
 
+    public function registerAdmin(RegisterRequest $request)
+    {
+        try {
+            $user = $this->authService->registerUser($request->validated());
+
+            return $this->jsonResponse(HTTP::HTTP_CREATED, 'Registration successful. Check your email for the OTP.', [
+                'user' => $user,
+            ]);
+        } catch (\Exception $e) {
+            return $this->jsonResponse(HTTP::HTTP_SERVER_ERROR, 'Registration failed. Please try again.', [
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
     public function login(LoginRequest $request)
     {
         $response = $this->authService->loginUser($request->email, $request->password);
