@@ -6,14 +6,18 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use App\Traits\HasJsonResponse;
 use App\Support\HttpConstants as HTTP;
-
+use App\Enums\UserRole;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\Model;
 class StoreService
 {
     use HasJsonResponse;
-    public function getAllStores()
+    public function getAllStores(): LengthAwarePaginator|Collection
 {
     $user = Auth::user();
-    if ($user->role && $user->role->name === 'admin') {
+    if ($user->role && $user->role->name === UserRole::ADMIN->value) {
         return Store::with('user')->paginate(20);
     }
 
@@ -21,13 +25,13 @@ class StoreService
     return Store::where('user_id', $user->id)->with('user')->get();
 }
 
-public function getStoreById($id)
+public function getStoreById($id): Model|JsonResponse|null
 {
     $user = Auth::user();
 
     $query = Store::where('id', $id)->with('user');
 
-    if ($user->role && $user->role->name !== 'admin') {
+    if ($user->role && $user->role->name !== UserRole::ADMIN->value) {
         $query->where('user_id', $user->id);
     }
 
@@ -40,13 +44,13 @@ public function getStoreById($id)
     return $store;
 }
 
-public function updateStore($id, array $data)
+public function updateStore($id, array $data): Model|JsonResponse|null
 {
     $user = Auth::user();
 
     $query = Store::where('id', $id);
 
-    if ($user->role && $user->role->name !== 'admin') {
+    if ($user->role && $user->role->name !== UserRole::ADMIN->value) {
         $query->where('user_id', $user->id);
     }
     $store = $query->first();
@@ -72,7 +76,7 @@ public function deleteStore($id)
 
     $query = Store::where('id', $id);
 
-    if ($user->role && $user->role->name !== 'admin') {
+    if ($user->role && $user->role->name !== UserRole::ADMIN->value) {
         $query->where('user_id', $user->id);
     }
 
@@ -80,24 +84,17 @@ public function deleteStore($id)
 
     if (!$store) {
         return $this->jsonResponse(HTTP::HTTP_NOT_FOUND, 'Store not found');
-    }else{
-
-
-
-    $store->delete();
-
-    return $this->jsonResponse(HTTP::HTTP_ACCEPTED, 'Store deleted successfully', $store);
-}
+    }
 }
 
-public function createStore(array $data)
+public function createStore(array $data):store
 {
     $data['slug'] = Str::slug($data['name']);
 
     return Store::create($data);
 }
 
-public function getAllPublicStores()
+public function getAllPublicStores():collection
 {
     return Store::where('status', 'active')->with('user')->latest()->get();
 }
