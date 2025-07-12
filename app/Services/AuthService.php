@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\DB;
 use App\Mail\OtpMail;
 use App\Traits\GeneratesAuthAccessCredentials;
 use App\Models\Role;
+use App\Enums\UserRole;
 
 class AuthService
 {
@@ -20,7 +21,7 @@ class AuthService
     public function registerUser(array $data): User
     {
         return DB::transaction(function () use ($data): User {
-            $role = Role::where('name', 'User')->first();
+            $role = Role::where('name', UserRole::USER->value)->first();
 
             if (!$role) {
                 throw new \Exception('User role not found.');
@@ -44,7 +45,7 @@ class AuthService
     public function registerAdmin(array $data): User
     {
         return DB::transaction(function () use ($data): User {
-            $role = Role::where('name', 'Admin')->first();
+            $role = Role::where('name', UserRole::ADMIN->value)->first();
 
             if (!$role) {
                 throw new \Exception('Admin role not found.');

@@ -38,6 +38,5 @@ Route::middleware('auth:sanctum')->prefix('user')->group(function () {
 
 Route::middleware('auth:sanctum')->prefix('admin')->group(function () {
     // Store resource endpoints
-    Route::get('create-admin', [StoreController::class, 'registerAdmin'])->name('create.admin');
-    
+    Route::get('create-admin', [StoreController::class, 'registerAdmin'])->name('create.admin'); 
 });
