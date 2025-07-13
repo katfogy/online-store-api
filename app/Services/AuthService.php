@@ -11,6 +11,8 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\DB;
 use App\Mail\OtpMail;
 use App\Traits\GeneratesAuthAccessCredentials;
+use App\Models\Role;
+use App\Enums\UserRole;
 
 class AuthService
 {
@@ -19,12 +21,43 @@ class AuthService
     public function registerUser(array $data): User
     {
         return DB::transaction(function () use ($data): User {
-            $user = User::create([
-                'name' => $data['name'],
-                'email' => $data['email'],
-                'phone_number' => $data['phone_number'],
-                'password' => Hash::make($data['password']),
-            ]);
+            $role = Role::where('name', UserRole::USER->value)->first();
+
+            if (!$role) {
+                throw new \Exception('User role not found.');
+            }
+
+        $user = User::create([
+            'name'        => $data['name'],
+            'email'       => $data['email'],
+            'phone_number'=> $data['phone_number'],
+            'password'    => Hash::make($data['password']),
+            'role_id'     => $role->id, 
+        ]);
+
+            $this->sendOtp($user, 'account_creation');
+            return $user;
+        });
+    }
+
+
+
+    public function registerAdmin(array $data): User
+    {
+        return DB::transaction(function () use ($data): User {
+            $role = Role::where('name', UserRole::ADMIN->value)->first();
+
+            if (!$role) {
+                throw new \Exception('Admin role not found.');
+            }
+
+        $user = User::create([
+            'name'        => $data['name'],
+            'email'       => $data['email'],
+            'phone_number'=> $data['phone_number'],
+            'password'    => Hash::make($data['password']),
+            'role_id'     => $role->id, 
+        ]);
 
             $this->sendOtp($user, 'account_creation');
             return $user;
