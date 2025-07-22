@@ -11,11 +11,9 @@ use App\Support\HttpConstants as HTTP;
 class ProductController extends Controller
 {
     use HasJsonResponse;
-    protected ProductService $productService;
 
-    public function __construct(ProductService $productService)
+    public function __construct(protected ProductService $productService)
     {
-        $this->productService = $productService;
     }
 
     public function index(): JsonResponse
@@ -27,13 +25,11 @@ class ProductController extends Controller
     public function store(ProductRequest $request): JsonResponse
     {
         $data = $request->validated();
-        $data['created_by'] = auth()->id();
-
         $product = $this->productService->createProduct($data);
         return $this->jsonResponse(HTTP::HTTP_CREATED, 'Product created successfully', $product);
     }
 
-    public function show(int $id): JsonResponse
+    public function show(string $id): JsonResponse
     {
         $product = $this->productService->getProductById($id);
 
@@ -44,7 +40,7 @@ class ProductController extends Controller
         return $this->jsonResponse(HTTP::HTTP_SUCCESS, 'Product fetched successfully', $product);
     }
 
-    public function update(ProductRequest $request, int $id): JsonResponse
+    public function update(ProductRequest $request, string $id): JsonResponse
     {
         $data = $request->validated();
         $product = $this->productService->updateProduct($id, $data);
@@ -56,7 +52,7 @@ class ProductController extends Controller
         return $this->jsonResponse(HTTP::HTTP_SUCCESS, 'Product updated successfully', $product);
     }
 
-    public function destroy(int $id): JsonResponse
+    public function destroy(string $id): JsonResponse
     {
         $deleted = $this->productService->deleteProduct($id);
 
