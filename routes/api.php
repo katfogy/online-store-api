@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\StoreController;
+use App\Http\Controllers\ProductController;
 
 
 
@@ -33,6 +34,12 @@ Route::middleware('auth:sanctum')->prefix('user')->group(function () {
     Route::get('stores/{id}', [StoreController::class, 'show'])->name('candidate.stores.show');
     Route::post('stores/{id}', [StoreController::class, 'update'])->name('candidate.stores.update.partial');
     Route::delete('stores/{id}', [StoreController::class, 'destroy'])->name('candidate.stores.destroy');
+
+    Route::get('products', [ProductController::class, 'index']);
+    Route::post('products', [ProductController::class, 'store']);
+    Route::get('products/{id}', [ProductController::class, 'show']);
+    Route::put('products/{id}', [ProductController::class, 'update']);
+    Route::delete('products/{id}', [ProductController::class, 'destroy']);
 });
 
 
